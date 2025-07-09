@@ -1,0 +1,22 @@
+
+{
+  "name": "boids",
+  "version": "1.0.0",
+  "description": "Boids simulation with HTML Canvas",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": ["canvas", "simulation", "boids", "typescript"],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.9.0",
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vite": "^5.4.0",
+    "@types/node": "^22.0.0"
+  }
+}
