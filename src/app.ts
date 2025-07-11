@@ -33,7 +33,7 @@ const BOID_STYLE: BoidStyle = BoidStyle.TRIANGLE;
 const BOID_COLOR = "blue";
 
 const SHOW_STATS = true;
-const STATS_FONT_SIZE = 20;
+const STATS_FONT_SIZE = 40;
 
 export type Point = {
   topOffset: number;
@@ -265,8 +265,15 @@ function main() {
     throw new Error("Could not find canvas element");
   }
 
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+  function setCanvasResolution() {
+    canvas.width = window.innerWidth * 2;
+    canvas.height = window.innerHeight * 2;
+
+    canvas.style.width = `100%`;
+    canvas.style.height = `100%`;
+  }
+
+  setCanvasResolution();
 
   const ctx = canvas.getContext("2d");
 
@@ -315,10 +322,7 @@ function main() {
     }
   });
 
-  window.addEventListener("resize", () => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-  });
+  window.addEventListener("resize", setCanvasResolution);
 
   animate(ctx);
 }
