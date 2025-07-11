@@ -1,13 +1,14 @@
 import { match } from "ts-pattern";
 import MaxHeap from "./heap";
+import { QuadTree } from "./quad_tree";
 
 enum FlockType {
   DISTANCE = "distance",
   SIZE = "size",
 }
 
-const NUM_BOIDS = 1000;
-const MOVEMENT_SPEED = 1;
+const NUM_BOIDS = 5000;
+const MOVEMENT_SPEED = 5;
 const LERP_CONST = 0.01;
 
 const FLOCK_TYPE: FlockType = FlockType.DISTANCE;
@@ -15,14 +16,23 @@ const FLOCK_TYPE: FlockType = FlockType.DISTANCE;
 const LOCAL_FLOCK_SIZE = 50;
 const CLOSE_FLOCK_SIZE = 3;
 
-const LOCAL_FLOCK_DISTANCE = 100;
-const CLOSE_FLOCK_DISTANCE = 25;
+const LOCAL_FLOCK_DISTANCE = 200;
+const CLOSE_FLOCK_DISTANCE = 100;
 
-type Boid = {
+const QUAD_TREE_DEBUG = true;
+
+const BOID_SIZE = 2;
+const BOID_LW_RATIO = 5;
+const BOID_COLOR = "blue";
+
+export type Point = {
   topOffset: number;
   leftOffset: number;
-  angle: number;
 };
+
+type Boid = {
+  angle: number;
+} & Point;
 
 function initBoids(
   numBoids: number,
@@ -38,19 +48,51 @@ function initBoids(
   }));
 }
 
+function drawDebugQuadTree(
+  ctx: CanvasRenderingContext2D,
+  quadTree: QuadTree<Point>,
+) {
+  const box = quadTree.boundary;
+  ctx.save();
+
+  ctx.lineWidth = 1;
+
+  ctx.strokeRect(box.left, box.top, box.right - box.left, box.bottom - box.top);
+
+  ctx.restore();
+
+  if (quadTree.details.divided) {
+    drawDebugQuadTree(ctx, quadTree.details.northwest);
+    drawDebugQuadTree(ctx, quadTree.details.northeast);
+    drawDebugQuadTree(ctx, quadTree.details.southwest);
+    drawDebugQuadTree(ctx, quadTree.details.southeast);
+  }
+}
+
 function drawBoid(ctx: CanvasRenderingContext2D, boid: Boid) {
   ctx.save();
 
   ctx.translate(boid.leftOffset, boid.topOffset);
   ctx.rotate(boid.angle);
 
-  ctx.fillStyle = "blue";
-  ctx.fillRect(-1, -5, 2, 10);
+  ctx.fillStyle = BOID_COLOR;
+  ctx.fillRect(
+    -BOID_SIZE / 2,
+    (BOID_LW_RATIO * -BOID_SIZE) / 2,
+    BOID_SIZE,
+    BOID_SIZE * BOID_LW_RATIO,
+  );
 
   ctx.restore();
 }
 
-function updateBoid(boid: Boid, _index: number, allBoids: Boid[]) {
+function updateBoid(
+  boid: Boid,
+  _index: number,
+  allBoids: Boid[],
+  quadTree: QuadTree<Boid>,
+  canvas: HTMLCanvasElement,
+) {
   const flocks = match(FLOCK_TYPE)
     .with(FlockType.SIZE, () => {
       const heap = new MaxHeap<Boid>();
@@ -77,14 +119,13 @@ function updateBoid(boid: Boid, _index: number, allBoids: Boid[]) {
       return { local, close };
     })
     .with(FlockType.DISTANCE, () => {
-      const getBoidsInRange = (range: number) =>
-        allBoids.filter(
-          (b) =>
-            (b.leftOffset - boid.leftOffset) *
-              (b.leftOffset - boid.leftOffset) +
-              (b.topOffset - boid.topOffset) * (b.topOffset - boid.topOffset) <
-            range * range,
-        );
+      const getBoidsInRange = (r: number) =>
+        quadTree.query({
+          top: boid.topOffset - r,
+          bottom: boid.topOffset + r,
+          left: boid.leftOffset - r,
+          right: boid.leftOffset + r,
+        });
       return {
         local: getBoidsInRange(LOCAL_FLOCK_DISTANCE),
         close: getBoidsInRange(CLOSE_FLOCK_DISTANCE),
@@ -130,14 +171,22 @@ function updateBoid(boid: Boid, _index: number, allBoids: Boid[]) {
     localFlockSummedDifference.leftOffset,
   );
 
+  const lerpAngleDiff = (to: number, from: number) =>
+    ((to - from + Math.PI) % (2 * Math.PI)) - Math.PI;
+
   boid.angle =
     boid.angle +
-    (localAverageAngle - boid.angle) * LERP_CONST * (1 / 3) +
-    (getAwayAngle - boid.angle) * LERP_CONST * (1 / 3) +
-    (cohereAngle - boid.angle) * LERP_CONST * (1 / 3);
+    lerpAngleDiff(localAverageAngle, boid.angle) * LERP_CONST * (1 / 3) +
+    lerpAngleDiff(getAwayAngle, boid.angle) * LERP_CONST * (1 / 3) +
+    lerpAngleDiff(cohereAngle, boid.angle) * LERP_CONST * (1 / 3);
 
   boid.topOffset -= Math.cos(boid.angle) * MOVEMENT_SPEED;
   boid.leftOffset += Math.sin(boid.angle) * MOVEMENT_SPEED;
+
+  if (boid.topOffset < 0) boid.topOffset = canvas.height;
+  if (boid.topOffset > canvas.height) boid.topOffset = 0;
+  if (boid.leftOffset < 0) boid.leftOffset = canvas.width;
+  if (boid.leftOffset > canvas.width) boid.leftOffset = 0;
 }
 
 function main() {
@@ -161,11 +210,22 @@ function main() {
   const boids = initBoids(NUM_BOIDS, 0, 0, canvas.width, canvas.height);
 
   function animate(ctx: CanvasRenderingContext2D) {
-    boids.forEach(updateBoid);
+    const quadTree = new QuadTree<Boid>(
+      { left: 0, top: 0, right: canvas.width, bottom: canvas.height },
+      50,
+    );
+
+    boids.forEach((boid, idx) => quadTree.insert(boid));
+
+    boids.forEach((boid, idx, allBoids) =>
+      updateBoid(boid, idx, allBoids, quadTree, canvas),
+    );
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     boids.forEach((boid) => drawBoid(ctx, boid));
+
+    if (QUAD_TREE_DEBUG) drawDebugQuadTree(ctx, quadTree);
 
     animationId = requestAnimationFrame(() => animate(ctx));
   }
@@ -177,7 +237,8 @@ function main() {
   });
 
   window.addEventListener("resize", () => {
-    console.log(window.innerWidth, window.outerWidth);
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
   });
 
   animate(ctx);
