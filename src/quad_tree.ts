@@ -30,6 +30,7 @@ export class QuadTree<T extends Point> {
   capacity: number;
   details:
     | {
+        totalItems: number;
         items: T[];
         divided: false;
         northeast: null;
@@ -38,6 +39,7 @@ export class QuadTree<T extends Point> {
         southwest: null;
       }
     | {
+        totalItems: number;
         items: null;
         divided: true;
         northeast: QuadTree<T>;
@@ -50,6 +52,7 @@ export class QuadTree<T extends Point> {
     this.boundary = boundary;
     this.capacity = capacity;
     this.details = {
+      totalItems: 0,
       items: [],
       divided: false,
       northeast: null,
@@ -75,14 +78,27 @@ export class QuadTree<T extends Point> {
     }
 
     if (!this.details.divided) {
+      this.details.totalItems += 1;
       this.details.items.push(item);
       return true;
     } else {
-      if (this.details.northwest.insert(item)) return true;
-      if (this.details.northeast.insert(item)) return true;
-      if (this.details.southwest.insert(item)) return true;
-      if (this.details.southeast.insert(item)) return true;
-      // This should never happen if boundaries and contains are correct
+      if (this.details.northwest.insert(item)) {
+        this.details.totalItems += 1;
+        return true;
+      }
+      if (this.details.northeast.insert(item)) {
+        this.details.totalItems += 1;
+        return true;
+      }
+      if (this.details.southwest.insert(item)) {
+        this.details.totalItems += 1;
+        return true;
+      }
+      if (this.details.southeast.insert(item)) {
+        this.details.totalItems += 1;
+        return true;
+      }
+
       throw new Error("Item does not fit in any child quadrant");
     }
   }
@@ -97,6 +113,7 @@ export class QuadTree<T extends Point> {
     const itemsToDistribute = this.details.items;
 
     this.details = {
+      totalItems: 0,
       northwest: new QuadTree(
         { top, left, bottom: verticalMid, right: horizontalMid },
         this.capacity,
@@ -118,10 +135,22 @@ export class QuadTree<T extends Point> {
     };
 
     for (const item of itemsToDistribute) {
-      if (this.details.northwest.insert(item)) continue;
-      if (this.details.northeast.insert(item)) continue;
-      if (this.details.southwest.insert(item)) continue;
-      if (this.details.southeast.insert(item)) continue;
+      if (this.details.northwest.insert(item)) {
+        this.details.totalItems += 1;
+        continue;
+      }
+      if (this.details.northeast.insert(item)) {
+        this.details.totalItems += 1;
+        continue;
+      }
+      if (this.details.southwest.insert(item)) {
+        this.details.totalItems += 1;
+        continue;
+      }
+      if (this.details.southeast.insert(item)) {
+        this.details.totalItems += 1;
+        continue;
+      }
       throw new Error("Item does not fit in any child quadrant");
     }
   }

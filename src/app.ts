@@ -7,9 +7,9 @@ enum FlockType {
   SIZE = "size",
 }
 
-const NUM_BOIDS = 5000;
+const NUM_BOIDS = 2000;
 const MOVEMENT_SPEED = 5;
-const LERP_CONST = 0.01;
+const LERP_CONST = 0.1;
 
 const FLOCK_TYPE: FlockType = FlockType.DISTANCE;
 
@@ -17,13 +17,17 @@ const LOCAL_FLOCK_SIZE = 50;
 const CLOSE_FLOCK_SIZE = 3;
 
 const LOCAL_FLOCK_DISTANCE = 200;
-const CLOSE_FLOCK_DISTANCE = 100;
+const CLOSE_FLOCK_DISTANCE = 50;
 
-const QUAD_TREE_DEBUG = true;
+const QUAD_TREE_CAPACITY = 16;
+const QUAD_TREE_DEBUG = false;
 
-const BOID_SIZE = 2;
-const BOID_LW_RATIO = 5;
+const BOID_SIZE = 1;
+const BOID_LW_RATIO = 10;
 const BOID_COLOR = "blue";
+
+const SHOW_STATS = true;
+const STATS_FONT_SIZE = 20;
 
 export type Point = {
   topOffset: number;
@@ -48,24 +52,65 @@ function initBoids(
   }));
 }
 
+function drawStats(
+  ctx: CanvasRenderingContext2D,
+  quadTree: QuadTree<Point>,
+  fps: number,
+) {
+  ctx.save();
+
+  ctx.font = `${STATS_FONT_SIZE}px sansserif`;
+  ctx.fillText(
+    `Boids In Canvas: ${quadTree.details.totalItems.toString()} FPS: ${fps.toPrecision(2)}`,
+    10,
+    STATS_FONT_SIZE + 10,
+  );
+
+  ctx.restore();
+}
+
 function drawDebugQuadTree(
   ctx: CanvasRenderingContext2D,
   quadTree: QuadTree<Point>,
+  depth = 0,
 ) {
   const box = quadTree.boundary;
   ctx.save();
 
-  ctx.lineWidth = 1;
+  const colors = [
+    "#00bfff", // light blue
+    "#00ff99", // green
+    "#ffcc00", // yellow
+    "#ff6699", // pink
+    "#ff3300", // red
+    "#9933ff", // purple
+  ];
+  const color = colors[depth % colors.length];
+
+  ctx.lineWidth = Math.max(1, 4 - depth * 0.5);
+  ctx.strokeStyle = color;
+  ctx.shadowColor = color;
 
   ctx.strokeRect(box.left, box.top, box.right - box.left, box.bottom - box.top);
 
+  ctx.fillStyle = color;
+
+  if (!quadTree.details.divided) {
+    quadTree.details.items.forEach((pt: Point) => {
+      ctx.beginPath();
+      ctx.arc(pt.leftOffset, pt.topOffset, 2, 0, 2 * Math.PI);
+      ctx.fill();
+    });
+  }
+
   ctx.restore();
 
+  // Recursively draw children
   if (quadTree.details.divided) {
-    drawDebugQuadTree(ctx, quadTree.details.northwest);
-    drawDebugQuadTree(ctx, quadTree.details.northeast);
-    drawDebugQuadTree(ctx, quadTree.details.southwest);
-    drawDebugQuadTree(ctx, quadTree.details.southeast);
+    drawDebugQuadTree(ctx, quadTree.details.northwest, depth + 1);
+    drawDebugQuadTree(ctx, quadTree.details.northeast, depth + 1);
+    drawDebugQuadTree(ctx, quadTree.details.southwest, depth + 1);
+    drawDebugQuadTree(ctx, quadTree.details.southeast, depth + 1);
   }
 }
 
@@ -84,6 +129,10 @@ function drawBoid(ctx: CanvasRenderingContext2D, boid: Boid) {
   );
 
   ctx.restore();
+}
+
+function mod(n: number, m: number): number {
+  return ((n % m) + m) % m;
 }
 
 function updateBoid(
@@ -183,10 +232,8 @@ function updateBoid(
   boid.topOffset -= Math.cos(boid.angle) * MOVEMENT_SPEED;
   boid.leftOffset += Math.sin(boid.angle) * MOVEMENT_SPEED;
 
-  if (boid.topOffset < 0) boid.topOffset = canvas.height;
-  if (boid.topOffset > canvas.height) boid.topOffset = 0;
-  if (boid.leftOffset < 0) boid.leftOffset = canvas.width;
-  if (boid.leftOffset > canvas.width) boid.leftOffset = 0;
+  boid.topOffset = mod(boid.topOffset, canvas.height);
+  boid.leftOffset = mod(boid.leftOffset, canvas.width);
 }
 
 function main() {
@@ -206,16 +253,24 @@ function main() {
   }
 
   let animationId: number;
+  let prevCall: DOMHighResTimeStamp | undefined = undefined;
 
   const boids = initBoids(NUM_BOIDS, 0, 0, canvas.width, canvas.height);
 
   function animate(ctx: CanvasRenderingContext2D) {
+    let fps: number | undefined = undefined;
+    const currCall = performance.now();
+    if (prevCall) {
+      fps = 1000 / (currCall - prevCall);
+    }
+    prevCall = currCall;
+
     const quadTree = new QuadTree<Boid>(
       { left: 0, top: 0, right: canvas.width, bottom: canvas.height },
-      50,
+      QUAD_TREE_CAPACITY,
     );
 
-    boids.forEach((boid, idx) => quadTree.insert(boid));
+    boids.forEach((boid) => quadTree.insert(boid));
 
     boids.forEach((boid, idx, allBoids) =>
       updateBoid(boid, idx, allBoids, quadTree, canvas),
@@ -226,6 +281,8 @@ function main() {
     boids.forEach((boid) => drawBoid(ctx, boid));
 
     if (QUAD_TREE_DEBUG) drawDebugQuadTree(ctx, quadTree);
+
+    if (SHOW_STATS) drawStats(ctx, quadTree, fps ?? 0);
 
     animationId = requestAnimationFrame(() => animate(ctx));
   }
