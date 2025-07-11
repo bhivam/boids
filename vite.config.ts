@@ -1,24 +1,26 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from "vite";
 
 export default defineConfig({
-  root: '.',
-  publicDir: 'public',
+  base: "/boids",
+  plugins: [],
+  root: ".",
+  publicDir: "public",
   build: {
-    outDir: 'dist',
+    outDir: "dist",
     sourcemap: true,
     rollupOptions: {
       input: {
-        main: 'index.html'
-      }
-    }
+        main: "index.html",
+      },
+    },
   },
   server: {
     port: 3000,
     open: true,
-    host: true
+    host: true,
   },
   preview: {
     port: 4173,
-    open: true
-  }
-}) 
+    open: true,
+  },
+});

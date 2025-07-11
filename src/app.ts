@@ -7,8 +7,13 @@ enum FlockType {
   SIZE = "size",
 }
 
+enum BoidStyle {
+  RECTANGLE = "rectangle",
+  TRIANGLE = "triangle",
+}
+
 const NUM_BOIDS = 2000;
-const MOVEMENT_SPEED = 5;
+const MOVEMENT_SPEED = 2;
 const LERP_CONST = 0.1;
 
 const FLOCK_TYPE: FlockType = FlockType.DISTANCE;
@@ -19,11 +24,12 @@ const CLOSE_FLOCK_SIZE = 3;
 const LOCAL_FLOCK_DISTANCE = 200;
 const CLOSE_FLOCK_DISTANCE = 50;
 
-const QUAD_TREE_CAPACITY = 16;
+const QUAD_TREE_CAPACITY = 64;
 const QUAD_TREE_DEBUG = false;
 
-const BOID_SIZE = 1;
+const BOID_SIZE = 2;
 const BOID_LW_RATIO = 10;
+const BOID_STYLE: BoidStyle = BoidStyle.TRIANGLE;
 const BOID_COLOR = "blue";
 
 const SHOW_STATS = true;
@@ -59,7 +65,8 @@ function drawStats(
 ) {
   ctx.save();
 
-  ctx.font = `${STATS_FONT_SIZE}px sansserif`;
+  ctx.fillStyle = "black";
+  ctx.font = `${STATS_FONT_SIZE}px arial`;
   ctx.fillText(
     `Boids In Canvas: ${quadTree.details.totalItems.toString()} FPS: ${fps.toPrecision(2)}`,
     10,
@@ -116,17 +123,29 @@ function drawDebugQuadTree(
 
 function drawBoid(ctx: CanvasRenderingContext2D, boid: Boid) {
   ctx.save();
-
   ctx.translate(boid.leftOffset, boid.topOffset);
   ctx.rotate(boid.angle);
 
   ctx.fillStyle = BOID_COLOR;
-  ctx.fillRect(
-    -BOID_SIZE / 2,
-    (BOID_LW_RATIO * -BOID_SIZE) / 2,
-    BOID_SIZE,
-    BOID_SIZE * BOID_LW_RATIO,
-  );
+
+  match(BOID_STYLE)
+    .with(BoidStyle.TRIANGLE, () => {
+      ctx.beginPath();
+      ctx.moveTo(0, -BOID_SIZE * 2);
+      ctx.lineTo(-BOID_SIZE, BOID_SIZE * 2);
+      ctx.lineTo(BOID_SIZE, BOID_SIZE * 2);
+      ctx.closePath();
+      ctx.fill();
+    })
+    .with(BoidStyle.RECTANGLE, () => {
+      ctx.fillRect(
+        -BOID_SIZE / 2,
+        (BOID_LW_RATIO * -BOID_SIZE) / 2,
+        BOID_SIZE,
+        BOID_SIZE * BOID_LW_RATIO,
+      );
+    })
+    .exhaustive();
 
   ctx.restore();
 }
@@ -186,7 +205,10 @@ function updateBoid(
   const closeFlock = flocks.close;
 
   const localAverageAngle =
-    localFlock.reduce((sum, curr) => sum + curr.angle, 0) / localFlock.length;
+    localFlock.length > 0
+      ? localFlock.reduce((sum, curr) => sum + curr.angle, 0) /
+        localFlock.length
+      : boid.angle;
 
   const closeFlockSummedDifference = closeFlock.reduce(
     (location, curr) => ({
